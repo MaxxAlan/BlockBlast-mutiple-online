@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './Leaderboard.css';
+import { URL } from '../socket';
 
 export default function Leaderboard({ onClose, isMobile }) {
   const [data, setData] = useState({ solo: [], coop: [], versus: [] });
@@ -7,7 +8,7 @@ export default function Leaderboard({ onClose, isMobile }) {
   const [activeTab, setActiveTab] = useState('solo');
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/leaderboard')
+    fetch(`${URL}/api/leaderboard`)
       .then(r => r.json())
       .then(d => {
         setData(d);
