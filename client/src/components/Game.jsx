@@ -220,7 +220,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
         // Instead of elementsFromPoint testing at a single arbitrary point,
         // we calculate exactly which column/row the top-left of the shape falls into.
         const mat = dragRef.current.matrix;
-        const boardEl = document.querySelector('.grid-board:not(.opponent-grid)');
+        const boardEl = document.querySelector('.grid-container:not(.opponent-grid)');
         let hitRow = null, hitCol = null;
 
         if (boardEl && floatingRef.current) {

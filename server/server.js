@@ -2,7 +2,12 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { upsertUser, updateHighScore, addVersusWin, getLeaderboards } from './db.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -16,9 +21,7 @@ const io = new Server(httpServer, {
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Block Blast Multiplayer Server is running');
-});
+app.use(express.static(path.join(__dirname, '../public-path')));
 
 app.get('/api/leaderboard', (req, res) => {
   try {
@@ -27,6 +30,11 @@ app.get('/api/leaderboard', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Serve frontend for all other routes
+app.use((req, res, next) => {
+  res.sendFile(path.join(__dirname, '../public-path/index.html'));
 });
 
 const SHAPES = [
