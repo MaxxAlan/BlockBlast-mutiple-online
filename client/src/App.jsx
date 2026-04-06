@@ -152,9 +152,19 @@ function App() {
     };
   }, []);
 
+  // ── Lock body scroll when in game on mobile ─────────────
+  useEffect(() => {
+    if (view === 'game') {
+      document.body.classList.add('game-active');
+    } else {
+      document.body.classList.remove('game-active');
+    }
+  }, [view]);
+
   // ── Actions ─────────────────────────────────────────────
   const startSolo = () => { setPlayMode('solo'); setView('game'); };
   const startPvE  = () => { setPlayMode('pve');  setView('game'); };
+  const startTraining = () => { setPlayMode('training'); setView('game'); };
   const goHome    = () => {
     setView('home');
     setRoomId('');
@@ -184,7 +194,7 @@ function App() {
 
   // ── Render ───────────────────────────────────────────────
   return (
-    <div className="app-container">
+    <div className={`app-container ${view === 'game' ? 'game-active-container' : ''}`}>
 
       {/* ── HEADER ────────────────────────────── */}
       <header className="app-header">
@@ -227,6 +237,11 @@ function App() {
             <div className={`btn-group ${isMobile ? 'btn-group--vertical' : ''}`}>
               <button id="btn-solo"  className="btn btn--flex"           onClick={startSolo}>⚡ Chơi Đơn (Solo)</button>
               <button id="btn-pve"   className="btn btn--purple btn--flex" onClick={startPvE}>🤖 Đấu Với AI</button>
+            </div>
+            <div className={`btn-group ${isMobile ? 'btn-group--vertical' : ''}`} style={{ marginTop: '0.2rem' }}>
+              <button id="btn-training" className="btn btn--outline btn--flex" onClick={startTraining} style={{ borderStyle: 'dashed' }}>
+                🎓 Khu Vực Huấn Luyện
+              </button>
             </div>
           </div>
 

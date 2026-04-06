@@ -11,6 +11,7 @@ import {
   checkGameOver,
   GRID_SIZE,
 } from '../utils/gameLogic';
+import { TRAINING_STEPS } from '../utils/trainingLogic';
 import { getBestMove } from '../utils/aiLogic';
 import {
   playPlaceSound,
@@ -23,7 +24,11 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   const isCoop       = mode === 'coop';
   const isVersus     = mode === 'versus';
   const isPvE        = mode === 'pve';
+  const isTraining   = mode === 'training';
   const isMultiplayer = isCoop || isVersus;
+  
+  const [trainingStepIdx, setTrainingStepIdx] = useState(0);
+  const trainingScript = isTraining ? TRAINING_STEPS[trainingStepIdx] : null;
 
   // ── Game state ──────────────────────────────────────────
   const [board, setBoard]       = useState(createEmptyBoard);
@@ -76,13 +81,18 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
 
   // ── Init shapes ──────────────────────────────────────────
   useEffect(() => {
-    if (isCoop && roomId) {
+    if (isTraining) {
+      const ts = TRAINING_STEPS[0];
+      setBoard(ts.board || createEmptyBoard());
+      setShapes(ts.shapes);
+      setTrainingStepIdx(0);
+    } else if (isCoop && roomId) {
       socket.emit('coop_request_init', roomId);
     } else if (!isCoop) {
-      setShapes(getRandomShapes(3));
-      if (isPvE) setOpponentShapes(getRandomShapes(3));
+      setShapes(getRandomShapes(3, 0));
+      if (isPvE) setOpponentShapes(getRandomShapes(3, 0));
     }
-  }, [isPvE, isCoop, roomId]);
+  }, [isPvE, isCoop, isTraining, roomId]);
 
   // ── Score pop animation ──────────────────────────────────
   const prevScore = useRef(score);
@@ -165,11 +175,11 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   // Real-time tracking so if player closes window, highest score reflects immediately.
   useEffect(() => {
     if (uid && score > 0) {
-      if (!isVersus && !isPvE) {
+      if (!isVersus && !isPvE && !isTraining) {
         socket.emit('submit_score', { uid, mode, score });
       }
     }
-  }, [score, uid, mode, isVersus, isPvE]);
+  }, [score, uid, mode, isVersus, isPvE, isTraining]);
 
   useEffect(() => {
     if (isVersus && opponentGameOver && uid) {
@@ -430,42 +440,86 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
           setClearingCells(new Set());
           const { newBoard: cleared } = checkAndClearLines(placed);
           setBoard(cleared);
+          
+          let newScoreValue = score;
           setScore(prev => {
-            const ns = prev + shapeScore + linesCleared * 100;
-            if (isCoop) socket.emit('coop_place_block', { roomId, newBoard: cleared, newScore: ns });
-            return ns;
+            newScoreValue = prev + shapeScore + linesCleared * 100;
+            return newScoreValue;
           });
+          
           setShapes(prev => {
-            const ns = [...prev];
-            ns.splice(shapeIndex, 1);
-            const upcoming = ns.length === 0 ? getRandomShapes(3) : ns;
-            if (checkGameOver(cleared, upcoming)) {
+            let upcoming;
+            if (isTraining && trainingScript?.goal !== 'GRADUATE') {
+               const stepComplete = (trainingScript.goal === 'DROP_ANY' || (trainingScript.goal === 'CLEAR_LINE' && linesCleared > 0));
+               if (stepComplete) {
+                  const nextIdx = trainingStepIdx + 1;
+                  const nextScript = TRAINING_STEPS[nextIdx];
+                  if (nextScript) {
+                     setTimeout(() => setTrainingStepIdx(nextIdx), 0);
+                     if (nextScript.board) setTimeout(() => setBoard(nextScript.board), 0);
+                     upcoming = nextScript.shapes || getRandomShapes(3, newScoreValue);
+                  }
+               } else {
+                  setTimeout(() => setBoard(trainingScript.board), 0);
+                  upcoming = trainingScript.shapes;
+               }
+            } else {
+               const nsShapes = [...prev];
+               nsShapes.splice(shapeIndex, 1);
+               upcoming = nsShapes.length === 0 ? getRandomShapes(3, newScoreValue) : nsShapes;
+            }
+            
+            if (isCoop) socket.emit('coop_place_block', { roomId, newBoard: cleared, newScore: newScoreValue, newShapes: upcoming });
+            
+            if (upcoming && upcoming.length > 0 && checkGameOver(cleared, upcoming)) {
               setGameOver(true);
               playGameOverSound();
               if (isVersus) socket.emit('game_over', roomId);
             }
-            return upcoming;
+            return upcoming || [];
           });
         }, 380);
       });
     } else {
       // No lines to clear — instant update
       setBoard(placed);
+      
+      let newScoreValue = score;
       setScore(prev => {
-        const ns = prev + shapeScore;
-        if (isCoop) socket.emit('coop_place_block', { roomId, newBoard: placed, newScore: ns });
-        return ns;
+        newScoreValue = prev + shapeScore;
+        return newScoreValue;
       });
+      
       setShapes(prev => {
-        const ns = [...prev];
-        ns.splice(shapeIndex, 1);
-        const upcoming = ns.length === 0 ? getRandomShapes(3) : ns;
-        if (checkGameOver(placed, upcoming)) {
+        let upcoming;
+        if (isTraining && trainingScript?.goal !== 'GRADUATE') {
+           const stepComplete = (trainingScript.goal === 'DROP_ANY'); // linesCleared is 0 here
+           if (stepComplete) {
+              const nextIdx = trainingStepIdx + 1;
+              const nextScript = TRAINING_STEPS[nextIdx];
+              if (nextScript) {
+                 setTimeout(() => setTrainingStepIdx(nextIdx), 0);
+                 if (nextScript.board) setTimeout(() => setBoard(nextScript.board), 0);
+                 upcoming = nextScript.shapes || getRandomShapes(3, newScoreValue);
+              }
+           } else {
+              setTimeout(() => setBoard(trainingScript.board), 0);
+              upcoming = trainingScript.shapes;
+           }
+        } else {
+           const nsShapes = [...prev];
+           nsShapes.splice(shapeIndex, 1);
+           upcoming = nsShapes.length === 0 ? getRandomShapes(3, newScoreValue) : nsShapes;
+        }
+        
+        if (isCoop) socket.emit('coop_place_block', { roomId, newBoard: placed, newScore: newScoreValue, newShapes: upcoming });
+        
+        if (upcoming && upcoming.length > 0 && checkGameOver(placed, upcoming)) {
           setGameOver(true);
           playGameOverSound();
           if (isVersus) socket.emit('game_over', roomId);
         }
-        return upcoming;
+        return upcoming || [];
       });
     }
   }, [isCoop, isVersus, roomId]);
@@ -478,7 +532,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   }, [isVersus, opponentGameOver]);
 
   // ── Labels ───────────────────────────────────────────────
-  const myLabel      = isCoop ? '🤝 Bảng Chung (Co-op)' : '👤 Bạn';
+  const myLabel      = isCoop ? '🤝 Bảng Chung (Co-op)' : isTraining ? '🎓 Bảng Khởi Động' : '👤 Bạn';
   const opLabel      = isPvE  ? '🤖 BOT AI'              : '⚔️ Đối Thủ';
   const showOpponent = isVersus || isPvE;
 
@@ -503,7 +557,13 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
       )}
 
       {/* ─── PLAYER ─── */}
-      <div className="player-section">
+      <div className="player-section" style={{ position: 'relative' }}>
+        {isTraining && trainingScript && (
+          <div className="training-banner">
+            <span className="training-icon">💡</span>
+            <span className="training-text">{trainingScript.message}</span>
+          </div>
+        )}
         <div className="player-header">
           <span className="player-name">{myLabel}</span>
           <div className="score-board">

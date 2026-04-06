@@ -45,9 +45,9 @@
 
   /* Sizing tokens for responsive boards */
   --cell-size-laptop: 44px;
-  --cell-size-mobile: 34px;
+  --cell-size-mobile: 40px;
   --gap-laptop: 4px;
-  --gap-mobile: 3px;
+  --gap-mobile: 4px;
 }
 
 /* =========================================================
@@ -651,13 +651,15 @@ body {
 }
 
 /* Ghost preview — valid drop target */
-.grid-cell.preview-ghost {
+.preview-shape-cell {
   background: linear-gradient(135deg, var(--block-color-start), var(--block-color-end));
-  opacity: 0.5;
-  transform: scale(0.94);
+  opacity: 0.55;
+  transform: scale(0.95);
   border-radius: 6px;
-  box-shadow: 0 0 14px var(--block-shadow), inset 0 0 0 1px rgba(255,255,255,0.3);
-  transition: background 0.1s, opacity 0.1s;
+  box-shadow: 0 0 14px var(--block-shadow), inset 0 0 0 1px rgba(255,255,255,0.4);
+  transition: all 0.1s;
+  pointer-events: none;
+  z-index: 5;
 }
 
 /* Line-clear flash animation */
@@ -822,7 +824,7 @@ body {
 }
 
 /* =========================================================
-   STATUS TEXTS (Game Over / Win)
+   STATUS TEXTS & TRAINING BANNER
    ========================================================= */
 .game-status-banner {
   width: 100%;
@@ -855,6 +857,31 @@ body {
   border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
+.training-banner {
+  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15));
+  border: 1px solid rgba(139,92,246,0.4);
+  padding: 0.8rem 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  animation: pulse 2.5s infinite alternate ease-in-out;
+  box-shadow: 0 4px 15px rgba(139,92,246,0.2);
+}
+
+.training-icon {
+  font-size: 1.5rem;
+  animation: dotPulse 1.5s infinite;
+}
+
+.training-text {
+  font-size: 0.95rem;
+  color: #e8f0fe;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.65; }
@@ -867,6 +894,14 @@ body.dragging {
   user-select: none;
   touch-action: none;
   overflow: hidden;
+}
+
+body.game-active {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* Disables all pull-to-refresh and bounce effects */
 }
 
 /* =========================================================

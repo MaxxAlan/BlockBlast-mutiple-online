@@ -28,10 +28,63 @@ export const SHAPES = [
     [0, 1],
     [1, 1]
   ],
-   // T shape
+   // T shape 
    [
     [1, 1, 1],
     [0, 1, 0]
+  ],
+  // Diagonal 2x2 \
+  [
+    [1, 0],
+    [0, 1]
+  ],
+  // Diagonal 2x2 /
+  [
+    [0, 1],
+    [1, 0]
+  ],
+  // Diagonal 3x3 \
+  [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1]
+  ],
+  // Diagonal 3x3 /
+  [
+    [0, 0, 1],
+    [0, 1, 0],
+    [1, 0, 0]
+  ],
+  // 2x3 Horizontal
+  [
+    [1, 1, 1],
+    [1, 1, 1]
+  ],
+  // 2x3 Vertical
+  [
+    [1, 1],
+    [1, 1],
+    [1, 1]
+  ],
+  // 3x3 Square
+  [
+    [1, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1]
+  ],
+  // 2x6 Horizontal
+  [
+    [1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1]
+  ],
+  // 2x6 Vertical
+  [
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1]
   ]
 ];
 
@@ -39,9 +92,25 @@ export const createEmptyBoard = () => {
   return Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
 };
 
-export const getRandomShapes = (count = 3) => {
+export const getRandomShapes = (count = 3, currentScore = 0) => {
+  let pool = [0, 1, 2, 3, 6, 7]; // Starter: dot, 2x2, 3-line, L-shapes
+
+  if (currentScore >= 100) {
+    // Phase 2: Add 4-lines, T shape, small diagonals (2x2 diag)
+    pool.push(4, 5, 8, 9, 10);
+  }
+  if (currentScore >= 300) {
+    // Phase 3: Add more weight to big shapes and add 2x3 blocks + large diagonals
+    pool.push(1, 4, 5, 6, 7, 8, 11, 12, 13, 14);
+  }
+  if (currentScore >= 600) {
+    // Phase 4: Even more weight to big shapes, add 3x3 block and massive 2x6 blocks
+    pool.push(1, 4, 4, 5, 5, 6, 7, 8, 13, 14, 15, 16, 17);
+  }
+
   return Array.from({ length: count }, () => {
-    return SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    const shapeIndex = pool[Math.floor(Math.random() * pool.length)];
+    return SHAPES[shapeIndex];
   });
 };
 
