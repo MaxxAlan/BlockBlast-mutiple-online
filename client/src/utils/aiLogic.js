@@ -7,7 +7,7 @@ function countHoles(board) {
     for (let c = 0; c < GRID_SIZE; c++) {
       if (board[r][c] === 0) {
         // Simple hole check: it's a hole if the top cell is blocked
-        if (r > 0 && board[r - 1][c] === 1) {
+        if (r > 0 && board[r - 1][c] > 0) {
           holes++;
         }
       }
@@ -32,7 +32,7 @@ export function getBestMove(board, shapes) {
       for (let c = 0; c < GRID_SIZE; c++) {
         if (canPlaceShape(board, matrix, r, c)) {
           // Play it in a simulation
-          const tempBoard = placeShape(board, matrix, r, c);
+          const tempBoard = placeShape(board, matrix, shape.colorId || 1, r, c);
           
           // Clear lines
           const { newBoard, linesCleared } = checkAndClearLines(tempBoard);

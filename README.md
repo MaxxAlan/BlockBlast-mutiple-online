@@ -149,3 +149,71 @@ Sau khi sửa xong dòng code đó:
 3. Vào lại trang web của Vercel (block-blast-mutiple-online.vercel.app), game của bạn bây giờ đã hoàn chỉnh có thể chơi được Online ở mọi nơi!
 
 Nếu bạn có vướng mắc ở một bước nào, hãy đưa lại ảnh cho mình xem, mình sẽ hỗ trợ bạn ngay!
+
+
+
+
+
+
+
+Listed directory BlockBlast-mutiple-online
+Viewed package.json:1-20
+Viewed vite.config.js:1-20
+Viewed socket.js:1-12
+Viewed server.js:240-277
+
+Để chạy dự án này trên máy tính của bạn (môi trường Local) cho mục đích phát triển và thử nghiệm, bạn cần khởi động song song 2 máy chủ: **Máy chủ Backend (Node/Socket.io)** và **Máy chủ Frontend (React/Vite)**. 
+
+Dưới đây là hướng dẫn từng bước chi tiết:
+
+### Yêu cầu ban đầu
+Máy tính của bạn cần cài đặt sẵn **Node.js** (phiên bản 18 trở lên). Kiểm tra bằng lệnh `node -v` trên Terminal/CMD.
+
+---
+
+### Bước 1: Khởi động Máy chủ Backend (Server)
+Máy chủ này sẽ chịu trách nhiệm đồng bộ hoá dữ liệu Socket.IO, lưu trữ điểm số và quản lý các phòng chơi bằng SQLite.
+
+1. Mở cửa sổ Terminal thứ nhất (hoặc Command Prompt).
+2. Di chuyển vào thư mục `server`:
+   ```bash
+   cd path/to/BlockBlast-mutiple-online/server
+   ```
+3. Cài đặt các thư viện cần thiết (chỉ cần chạy lần đầu):
+   ```bash
+   npm install
+   ```
+4. Chạy máy chủ:
+   ```bash
+   npm start
+   ```
+   *Lúc này bạn sẽ thấy dòng thông báo hiển thị: `Server is running on port 3001` và `Cleaned up ... old rooms from database.`*
+
+---
+
+### Bước 2: Khởi động Máy chủ Frontend (Giao diện Client)
+Hệ thống Frontend sử dụng Vite proxy thông minh được cấu hình sẵn để tự kết nối tới cổng 3001 của Backend ảo.
+
+1. Mở một cửa sổ Terminal thứ hai (giữ nguyên Terminal thứ nhất đang chạy backend).
+2. Di chuyển vào thư mục `client`:
+   ```bash
+   cd path/to/BlockBlast-mutiple-online/client
+   ```
+3. Cài đặt các thư viện đồ họa React/Vite (chỉ cần chạy lần đầu):
+   ```bash
+   npm install
+   ```
+4. Chạy phiên bản phát triển (Dev server):
+   ```bash
+   npm run dev
+   ```
+
+---
+
+### Bước 3: Truy cập và Trải nghiệm
+Sau khi Terminal 2 chạy xong, màn hình sẽ hiển thị đường dẫn truy cập (thường là http://localhost:5173). 
+
+1. Mở trình duyệt (Chrome/Cốc Cốc/Safari) và truy cập vào địa chỉ mạng cục bộ đó: **`http://localhost:5173`**
+2. **Để test chế độ Co-op / Mạng Lan:** Bạn có thể mở đồng thời 2 tab ẩn danh, hoặc lấy mã QR / dãy mã phòng để nhập thử chéo qua lại giữa các cửa sổ. Socket.IO sẽ đồng bộ Real-time ở chế độ Developer!
+
+*(Lưu ý: Nếu bạn muốn Build web thành 1 file tĩnh duy nhất để mang đi xuất bản thì chạy `npm run build` trong Terminal thư mục client, sau đó copy toàn bộ nội dung sinh ra trong ruột thư mục `client/dist/` dán đè vào thư mục gốc `public-path/`. Khi đó, bạn chỉ cần khởi động Backend bằng lệnh `npm start` là nó kiêm luôn cả phát hành giao diện cho bạn ngay ở cổng localhost:3001)*

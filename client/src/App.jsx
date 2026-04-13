@@ -24,7 +24,19 @@ function QRCanvas({ value }) {
     QRCode.toCanvas(canvasRef.current, value, {
       width: 160,
       margin: 1,
-      color: { dark: '#e8f0fe', light: '#0a1020' },
+      color: { dark: '#ffffff', light: '#00000000' },
+    }, (error) => {
+      if (error) return;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      ctx.globalCompositeOperation = 'source-in';
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#00eaff'); // Neon cyan
+      gradient.addColorStop(0.5, '#facc15'); // Yellow
+      gradient.addColorStop(1, '#f472b6'); // Pink
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
     });
   }, [value]);
 
@@ -80,6 +92,7 @@ function App() {
   const [inputRoom, setInputRoom] = useState('');
   const [playMode, setPlayMode]   = useState('solo');
   const [errorMsg, setErrorMsg]   = useState('');
+  const [roomCreator, setRoomCreator] = useState('');
   
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [isConnecting, setIsConnecting] = useState(!socket.connected);
@@ -115,16 +128,20 @@ function App() {
       // Handle both {roomId, mode} object and plain string (legacy server)
       const code = typeof data === 'string' ? data : data?.roomId;
       const mode = typeof data === 'object' ? data?.mode : undefined;
+      const creatorName = typeof data === 'object' ? data?.creatorName : undefined;
       if (code) setRoomId(code);
       if (mode) setPlayMode(mode);
+      if (creatorName) setRoomCreator(creatorName);
       setView('lobby_waiting');
     });
 
     socket.on('room_joined', (data) => {
       const code = typeof data === 'string' ? data : data?.roomId;
       const mode = typeof data === 'object' ? data?.mode : undefined;
+      const creatorName = typeof data === 'object' ? data?.creatorName : undefined;
       if (code) setRoomId(code);
       if (mode) setPlayMode(mode);
+      if (creatorName) setRoomCreator(creatorName);
       setView('lobby_waiting');
     });
 
@@ -181,7 +198,7 @@ function App() {
     socket.emit('init_user', { uid: getUID(), nickname: nicknameInput.trim() });
   };
 
-  const createRoom = (m) => socket.emit('create_room', m);
+  const createRoom = (m) => socket.emit('create_room', { mode: m, creatorName: getNickname() || 'Người lạ' });
 
   const joinRoom = useCallback(() => {
     if (inputRoom.trim() === '') return;
@@ -320,7 +337,7 @@ function App() {
 
       {/* ── GAME ──────────────────────────────── */}
       {view === 'game' && (
-        <Game roomId={roomId} mode={playMode} isMobile={isMobile} uid={getUID()} />
+        <Game roomId={roomId} mode={playMode} isMobile={isMobile} uid={getUID()} roomCreator={roomCreator} />
       )}
       
       {/* ── LEADERBOARD MODAL ────────────────── */}

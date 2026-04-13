@@ -1,91 +1,24 @@
 export const GRID_SIZE = 8;
 
 export const SHAPES = [
-  // Dot 1x1
-  [[1]],
-  // Square 2x2
-  [
-    [1, 1],
-    [1, 1],
-  ],
-  // Horizontal Line 3
-  [[1, 1, 1]],
-  // Vertical Line 3
-  [[1], [1], [1]],
-  // Horizontal Line 4
-  [[1, 1, 1, 1]],
-  // Vertical Line 4
-  [[1], [1], [1], [1]],
-  // L Shape Left
-  [
-    [1, 0],
-    [1, 0],
-    [1, 1]
-  ],
-  // L Shape Right
-  [
-    [0, 1],
-    [0, 1],
-    [1, 1]
-  ],
-   // T shape 
-   [
-    [1, 1, 1],
-    [0, 1, 0]
-  ],
-  // Diagonal 2x2 \
-  [
-    [1, 0],
-    [0, 1]
-  ],
-  // Diagonal 2x2 /
-  [
-    [0, 1],
-    [1, 0]
-  ],
-  // Diagonal 3x3 \
-  [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-  ],
-  // Diagonal 3x3 /
-  [
-    [0, 0, 1],
-    [0, 1, 0],
-    [1, 0, 0]
-  ],
-  // 2x3 Horizontal
-  [
-    [1, 1, 1],
-    [1, 1, 1]
-  ],
-  // 2x3 Vertical
-  [
-    [1, 1],
-    [1, 1],
-    [1, 1]
-  ],
-  // 3x3 Square
-  [
-    [1, 1, 1],
-    [1, 1, 1],
-    [1, 1, 1]
-  ],
-  // 2x6 Horizontal
-  [
-    [1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1]
-  ],
-  // 2x6 Vertical
-  [
-    [1, 1],
-    [1, 1],
-    [1, 1],
-    [1, 1],
-    [1, 1],
-    [1, 1]
-  ]
+  { matrix: [[1]], colorId: 1 },
+  { matrix: [[1, 1], [1, 1]], colorId: 2 },
+  { matrix: [[1, 1, 1]], colorId: 3 },
+  { matrix: [[1], [1], [1]], colorId: 4 },
+  { matrix: [[1, 1, 1, 1]], colorId: 5 },
+  { matrix: [[1], [1], [1], [1]], colorId: 6 },
+  { matrix: [[1, 0], [1, 0], [1, 1]], colorId: 7 },
+  { matrix: [[0, 1], [0, 1], [1, 1]], colorId: 8 },
+  { matrix: [[1, 1, 1], [0, 1, 0]], colorId: 9 },
+  { matrix: [[1, 0], [0, 1]], colorId: 10 },
+  { matrix: [[0, 1], [1, 0]], colorId: 11 },
+  { matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], colorId: 12 },
+  { matrix: [[0, 0, 1], [0, 1, 0], [1, 0, 0]], colorId: 13 },
+  { matrix: [[1, 1, 1], [1, 1, 1]], colorId: 14 },
+  { matrix: [[1, 1], [1, 1], [1, 1]], colorId: 15 },
+  { matrix: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], colorId: 16 },
+  { matrix: [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]], colorId: 17 },
+  { matrix: [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1]], colorId: 18 }
 ];
 
 export const createEmptyBoard = () => {
@@ -121,7 +54,7 @@ export const canPlaceShape = (board, shape, row, col) => {
         if (row + r < 0 || row + r >= GRID_SIZE || col + c < 0 || col + c >= GRID_SIZE) {
           return false; // Out of bounds
         }
-        if (board[row + r][col + c] === 1) {
+        if (board[row + r][col + c] > 0) {
           return false; // Overlapping existing block
         }
       }
@@ -130,12 +63,12 @@ export const canPlaceShape = (board, shape, row, col) => {
   return true;
 };
 
-export const placeShape = (board, shape, row, col) => {
+export const placeShape = (board, shape, colorId, row, col) => {
   const newBoard = board.map(row => [...row]);
   for (let r = 0; r < shape.length; r++) {
     for (let c = 0; c < shape[r].length; c++) {
       if (shape[r][c] === 1) {
-        newBoard[row + r][col + c] = 1;
+        newBoard[row + r][col + c] = colorId || 1;
       }
     }
   }
@@ -149,7 +82,7 @@ export const checkAndClearLines = (board) => {
 
   // Check rows
   for (let r = 0; r < GRID_SIZE; r++) {
-    if (board[r].every(cell => cell === 1)) {
+    if (board[r].every(cell => cell > 0)) {
       rowsToClear.push(r);
     }
   }

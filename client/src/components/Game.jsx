@@ -20,7 +20,7 @@ import {
   playWinSound,
 } from '../utils/sounds';
 
-export default function Game({ roomId, mode, isMobile = false, uid }) {
+export default function Game({ roomId, mode, isMobile = false, uid, roomCreator }) {
   const isCoop       = mode === 'coop';
   const isVersus     = mode === 'versus';
   const isPvE        = mode === 'pve';
@@ -31,10 +31,35 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   const trainingScript = isTraining ? TRAINING_STEPS[trainingStepIdx] : null;
 
   // ── Game state ──────────────────────────────────────────
-  const [board, setBoard]       = useState(createEmptyBoard);
-  const [shapes, setShapes]     = useState([]);
-  const [score, setScore]       = useState(0);
+  const [board, setBoard]       = useState(() => {
+    if (mode === 'solo') {
+      const saved = localStorage.getItem('block_blast_solo_board');
+      if (saved) return JSON.parse(saved);
+    }
+    return createEmptyBoard();
+  });
+  const [shapes, setShapes]     = useState(() => {
+    if (mode === 'solo') {
+      const saved = localStorage.getItem('block_blast_solo_shapes');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.length > 0) return parsed;
+        } catch(e) {}
+      }
+    }
+    return [];
+  });
+  const [score, setScore]       = useState(() => {
+    if (mode === 'solo') {
+      const saved = localStorage.getItem('block_blast_solo_score');
+      if (saved) return parseInt(saved, 10);
+    }
+    return 0;
+  });
   const [gameOver, setGameOver] = useState(false);
+  const [coopRestarting, setCoopRestarting] = useState(false);
+  const [versusRestarting, setVersusRestarting] = useState(false);
   const [scorePopping, setScorePopping] = useState(false);
 
   // Clear animation: set of "row-col" keys currently flashing
@@ -44,12 +69,13 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   const [opponent, setOpponent]                 = useState(() => ({ board: createEmptyBoard(), score: 0 }));
   const [opponentShapes, setOpponentShapes]     = useState([]);
   const [opponentGameOver, setOpponentGameOver] = useState(false);
+  const [opponentLeft, setOpponentLeft]         = useState(false);
 
   // ── Drag state ───────────────────────────────────────────
   // dragState → React (triggers re-render for floating block matrix/active)
   // Position (x,y) is managed 100% via DOM refs — never in React state
   const [dragState, setDragState] = useState({ active: false, matrix: null, index: null });
-  const dragRef = useRef({ active: false, matrix: null, index: null, x: 0, y: 0 });
+  const dragRef = useRef({ active: false, matrix: null, index: null, x: 0, y: 0, boardRect: null, floatWidth: null, floatHeight: null });
 
   const [previewState, setPreviewState] = useState(null);
   const previewRef = useRef(null);
@@ -89,10 +115,35 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     } else if (isCoop && roomId) {
       socket.emit('coop_request_init', roomId);
     } else if (!isCoop) {
-      setShapes(getRandomShapes(3, 0));
+      if (mode === 'solo') {
+        setShapes(prev => {
+          if (!prev || prev.length === 0) {
+            const loadedScore = parseInt(localStorage.getItem('block_blast_solo_score') || '0', 10);
+            return getRandomShapes(3, loadedScore);
+          }
+          return prev;
+        });
+      } else {
+        setShapes(getRandomShapes(3, 0));
+      }
       if (isPvE) setOpponentShapes(getRandomShapes(3, 0));
     }
-  }, [isPvE, isCoop, isTraining, roomId]);
+  }, [isPvE, isCoop, isTraining, roomId, mode]);
+
+  // ── Auto Save to Local Storage ───────────────────────────
+  useEffect(() => {
+    if (mode === 'solo') {
+      if (!gameOver && shapes && shapes.length > 0) {
+        localStorage.setItem('block_blast_solo_board', JSON.stringify(board));
+        localStorage.setItem('block_blast_solo_shapes', JSON.stringify(shapes));
+        localStorage.setItem('block_blast_solo_score', score.toString());
+      } else if (gameOver) {
+        localStorage.removeItem('block_blast_solo_board');
+        localStorage.removeItem('block_blast_solo_shapes');
+        localStorage.removeItem('block_blast_solo_score');
+      }
+    }
+  }, [board, shapes, score, mode, gameOver]);
 
   // ── Score pop animation ──────────────────────────────────
   const prevScore = useRef(score);
@@ -116,17 +167,40 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     if (isVersus) {
       socket.on('opponent_update', (data) => setOpponent({ board: data.board, score: data.score }));
       socket.on('opponent_game_over', () => setOpponentGameOver(true));
+      socket.on('versus_restarting_soon', () => setVersusRestarting(true));
+      socket.on('versus_restart_now', () => {
+        setBoard(createEmptyBoard());
+        setScore(0);
+        setShapes(getRandomShapes(3));
+        setGameOver(false);
+        setOpponentGameOver(false);
+        setVersusRestarting(false);
+        setOpponent({ board: createEmptyBoard(), score: 0 });
+      });
     }
     if (isCoop) {
       socket.on('coop_init_state', (data) => {
+        setGameOver(false);
+        setCoopRestarting(false);
         if (data.board) setBoard(data.board);
         if (data.score) setScore(data.score);
-        if (data.shapes) setShapes(data.shapes);
+        if (data.shapes) {
+          setShapes(data.shapes);
+          if (data.board && checkGameOver(data.board, data.shapes)) {
+            setGameOver(true);
+          }
+        }
       });
       socket.on('coop_board_update', (data) => { 
         setBoard(data.board); 
         setScore(data.score);
-        if (data.shapes) setShapes(data.shapes);
+        if (data.shapes) {
+          setShapes(data.shapes);
+          if (checkGameOver(data.board, data.shapes)) {
+            setGameOver(true);
+            playGameOverSound();
+          }
+        }
       });
       socket.on('coop_shapes_update', (data) => {
         setShapes(data);
@@ -137,14 +211,20 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
       socket.on('coop_drag_stream_end', () => {
         setRemoteDrag(null);
       });
+      socket.on('coop_restarting_soon', () => {
+        setCoopRestarting(true);
+      });
     }
-    socket.on('opponent_left', () => { alert('Đồng đội / Đối thủ đã thoát!'); window.location.reload(); });
+    socket.on('opponent_left', () => { setOpponentLeft(true); });
     return () => {
       socket.off('opponent_update');
       socket.off('opponent_game_over');
+      socket.off('versus_restarting_soon');
+      socket.off('versus_restart_now');
       socket.off('coop_init_state');
       socket.off('coop_board_update');
       socket.off('coop_shapes_update');
+      socket.off('coop_restarting_soon');
       socket.off('coop_drag_stream');
       socket.off('coop_drag_stream_end');
       socket.off('opponent_left');
@@ -157,7 +237,8 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     const timer = setTimeout(() => {
       const move = getBestMove(opponent.board, opponentShapes);
       if (!move) { setOpponentGameOver(true); return; }
-      let newBoard = placeShape(opponent.board, move.matrix, move.row, move.col);
+      const shapeColor = opponentShapes[move.shapeIndex]?.colorId || 1;
+      let newBoard = placeShape(opponent.board, move.matrix, shapeColor, move.row, move.col);
       let shp = 0;
       move.matrix.forEach(r => r.forEach(c => { if (c === 1) shp += 10; }));
       const { newBoard: cleared, linesCleared } = checkAndClearLines(newBoard);
@@ -172,6 +253,19 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   }, [isPvE, opponent, opponentShapes, opponentGameOver, gameOver]);
 
   // ── Submit Score to DB ───────────────────────────────────
+  // Fetch initial high score from server on mount
+  useEffect(() => {
+    if (uid && mode && !isTraining) {
+      fetch(`${URL}/api/user/${uid}`)
+        .then(r => r.json())
+        .then(data => {
+          if (mode === 'solo' && data.solo_high_score > maxScore) setMaxScore(data.solo_high_score);
+          if (mode === 'coop' && data.coop_high_score > maxScore) setMaxScore(data.coop_high_score);
+        })
+        .catch(console.error);
+    }
+  }, [uid, mode]);
+
   // Real-time tracking so if player closes window, highest score reflects immediately.
   useEffect(() => {
     if (uid && score > 0) {
@@ -188,23 +282,34 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     }
   }, [opponentGameOver, isVersus, uid]);
 
-  // ── Theme based on score ─────────────────────────────────
-  useEffect(() => {
-    const r = document.documentElement;
-    if (score < 100)      { r.style.setProperty('--block-color-start','#3b82f6'); r.style.setProperty('--block-color-end','#8b5cf6'); r.style.setProperty('--block-shadow','rgba(59,130,246,0.35)'); }
-    else if (score < 300) { r.style.setProperty('--block-color-start','#10b981'); r.style.setProperty('--block-color-end','#3b82f6'); r.style.setProperty('--block-shadow','rgba(16,185,129,0.35)'); }
-    else if (score < 600) { r.style.setProperty('--block-color-start','#f59e0b'); r.style.setProperty('--block-color-end','#ec4899'); r.style.setProperty('--block-shadow','rgba(245,158,11,0.35)'); }
-    else                  { r.style.setProperty('--block-color-start','#ec4899'); r.style.setProperty('--block-color-end','#f43f5e'); r.style.setProperty('--block-shadow','rgba(244,63,94,0.4)'); }
-  }, [score]);
+  // Theme based on score (removed) - blocks now keep their classic intrinsic 3D UI colors.
 
   // ── Drag helpers ─────────────────────────────────────────
   const rotateMatrix = (m) => m[0].map((_, ci) => m.map(row => row[ci]).reverse());
+
+  const handleSoloRestart = () => {
+    setBoard(createEmptyBoard());
+    setScore(0);
+    setShapes(getRandomShapes(3));
+    setGameOver(false);
+    if (isPvE) {
+      setOpponent({ board: createEmptyBoard(), score: 0 });
+      setOpponentShapes(getRandomShapes(3));
+      setOpponentGameOver(false);
+    }
+    if (mode === 'solo') {
+      localStorage.removeItem('block_blast_solo_score');
+      localStorage.removeItem('block_blast_solo_board');
+      localStorage.removeItem('block_blast_solo_shapes');
+    }
+  };
 
   const moveFloating = (x, y) => {
     if (!floatingRef.current) return;
     // Use transform for positioning — React won't override since transform
     // is always set to 'translate(X,Y) translate(-50%,-110%)' and managed via DOM
-    floatingRef.current.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 110%))`;
+    const verticalOffset = isMobileRef.current ? 160 : 110;
+    floatingRef.current.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - ${verticalOffset}%))`;
   };
 
   // ── GLOBAL pointer handlers (mounted once, always active) ──
@@ -227,24 +332,35 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
         moveFloating(x, y);
 
         // ── Mathematical Hit-Test ─────────────────────────────────────────
-        // Instead of elementsFromPoint testing at a single arbitrary point,
-        // we calculate exactly which column/row the top-left of the shape falls into.
         const mat = dragRef.current.matrix;
-        const boardEl = document.querySelector('.grid-container:not(.opponent-grid)');
         let hitRow = null, hitCol = null;
 
-        if (boardEl && floatingRef.current) {
-          const boardRect = boardEl.getBoundingClientRect();
-          const floatRect = floatingRef.current.getBoundingClientRect();
+        if (!dragRef.current.boardRect) {
+          const boardEl = document.querySelector('.grid-container:not(.opponent-grid)');
+          if (boardEl) dragRef.current.boardRect = boardEl.getBoundingClientRect();
+        }
+
+        if (!dragRef.current.floatWidth && floatingRef.current) {
+          dragRef.current.floatWidth = floatingRef.current.offsetWidth;
+          dragRef.current.floatHeight = floatingRef.current.offsetHeight;
+        }
+
+        if (dragRef.current.boardRect && dragRef.current.floatWidth) {
+
+          const boardRect = dragRef.current.boardRect;
+          const floatWidth = dragRef.current.floatWidth;
+          const floatHeight = dragRef.current.floatHeight;
           
-          // Size of one cell (+ gap) on the main board
+          const verticalOffset = isMobileRef.current ? 1.6 : 1.1; // Matches moveFloating offset 160% vs 110%
+          
+          const floatLeft = x - (floatWidth / 2);
+          const floatTop = y - (floatHeight * verticalOffset);
+          
           const cellSize = boardRect.width / 8;
+          const floatHalfCell = isMobileRef.current ? 14 : 24;
           
-          // Test the center of the top-left block cell.
-          // Cell size of floating block is either 36px or 28px (approx 20px for half)
-          const floatHalfCell = isMobileRef.current ? 14 : 18;
-          const topX = floatRect.left + floatHalfCell;
-          const topY = floatRect.top + floatHalfCell;
+          const topX = floatLeft + floatHalfCell;
+          const topY = floatTop + floatHalfCell;
 
           hitCol = Math.floor((topX - boardRect.left) / cellSize);
           hitRow = Math.floor((topY - boardRect.top) / cellSize);
@@ -258,7 +374,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
             lastCellKey = key;
             // canPlaceShape gracefully handles out of bounds (returning false)
             if (canPlaceShape(boardRef.current, mat, hitRow, hitCol)) {
-              const ps = { matrix: mat, row: hitRow, col: hitCol };
+              const ps = { matrix: mat, row: hitRow, col: hitCol, colorId: dragRef.current.colorId };
               previewRef.current = ps;
               setPreviewState(ps);
               pRow = hitRow; pCol = hitCol;
@@ -285,6 +401,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
               roomId: roomIdRef.current,
               x, y,
               matrix: mat,
+              colorId: dragRef.current.colorId,
               shapeIndex: dragRef.current.index,
               previewRow: pRow,
               previewCol: pCol
@@ -303,6 +420,11 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
       const pr = previewRef.current;
       const idx = dragRef.current.index;
       const mat = dragRef.current.matrix;
+
+      // Reset cached metrics
+      dragRef.current.boardRect = null;
+      dragRef.current.floatWidth = null;
+      dragRef.current.floatHeight = null;
 
       // Reset drag state BEFORE committing drop (avoids double-trigger)
       dragRef.current.active = false;
@@ -327,7 +449,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
         const { x, y } = dragRef.current;
         // Re-use same visual-center offset as onMove
         const nRows = rotated.length;
-        const cellPx = isMobileRef.current ? (28 + 3) : (36 + 4);
+        const cellPx = isMobileRef.current ? (28 + 3) : (48 + 6);
         const hitY = Math.max(1, Math.round(y - nRows * cellPx * 0.6));
         const elements = document.elementsFromPoint(x, hitY);
         const cellNode = elements.find(
@@ -337,7 +459,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
           const row = parseInt(cellNode.dataset.row, 10);
           const col = parseInt(cellNode.dataset.col, 10);
           if (canPlaceShape(boardRef.current, rotated, row, col)) {
-            const ps = { matrix: rotated, row, col };
+            const ps = { matrix: rotated, row, col, colorId: dragRef.current.colorId };
             previewRef.current = ps;
             setPreviewState(ps);
           } else {
@@ -370,17 +492,18 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     if (gameOver) return;
     if (isCoopRef.current && remoteDragRef.current) return; // Wait for other player to finish
 
-    // Prevent text selection and default browser drag
-    e.preventDefault();
+    // Prevent text selection and default browser drag if cancelable
+    if (e.cancelable) e.preventDefault();
     const matrix = shape.matrix || shape;
+    const colorId = shape.colorId || 1;
     document.body.classList.add('dragging');
     const x = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
     const y = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
 
     // Set ref FIRST (handlers check this synchronously)
-    dragRef.current = { active: true, matrix, index, x, y };
+    dragRef.current = { active: true, matrix, index, colorId, x, y };
     // Trigger React render (show floating block with correct matrix)
-    setDragState({ active: true, matrix, index });
+    setDragState({ active: true, matrix, index, colorId });
   }, [gameOver]);
 
   // Once floating block renders, update its position from dragRef if needed
@@ -395,7 +518,8 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   // ── Commit shape drop (with clear animation) ─────────────
   const commitShapeDrop = useCallback((shapeMatrix, shapeIndex, startRow, startCol) => {
     const currentBoard = boardRef.current;
-    let placed = placeShape(currentBoard, shapeMatrix, startRow, startCol);
+    const colorId = shapesRef.current[shapeIndex]?.colorId || 1;
+    let placed = placeShape(currentBoard, shapeMatrix, colorId, startRow, startCol);
 
     let shapeScore = 0;
     shapeMatrix.forEach(r => r.forEach(c => { if (c === 1) shapeScore += 10; }));
@@ -404,7 +528,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
     const rowsToClear = [];
     const colsToClear = [];
     for (let r = 0; r < GRID_SIZE; r++) {
-      if (placed[r].every(c => c === 1)) rowsToClear.push(r);
+      if (placed[r].every(c => c > 0)) rowsToClear.push(r);
     }
     for (let c = 0; c < GRID_SIZE; c++) {
       let full = true;
@@ -441,11 +565,8 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
           const { newBoard: cleared } = checkAndClearLines(placed);
           setBoard(cleared);
           
-          let newScoreValue = score;
-          setScore(prev => {
-            newScoreValue = prev + shapeScore + linesCleared * 100;
-            return newScoreValue;
-          });
+          const newScoreValue = score + shapeScore + (linesCleared * 100 * comboMult);
+          setScore(newScoreValue);
           
           setShapes(prev => {
             let upcoming;
@@ -474,6 +595,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
             if (upcoming && upcoming.length > 0 && checkGameOver(cleared, upcoming)) {
               setGameOver(true);
               playGameOverSound();
+              socket.emit('log_game_over', { uid, mode, score: newScoreValue });
               if (isVersus) socket.emit('game_over', roomId);
             }
             return upcoming || [];
@@ -484,11 +606,8 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
       // No lines to clear — instant update
       setBoard(placed);
       
-      let newScoreValue = score;
-      setScore(prev => {
-        newScoreValue = prev + shapeScore;
-        return newScoreValue;
-      });
+      const newScoreValue = score + shapeScore;
+      setScore(newScoreValue);
       
       setShapes(prev => {
         let upcoming;
@@ -517,6 +636,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
         if (upcoming && upcoming.length > 0 && checkGameOver(placed, upcoming)) {
           setGameOver(true);
           playGameOverSound();
+          socket.emit('log_game_over', { uid, mode, score: newScoreValue });
           if (isVersus) socket.emit('game_over', roomId);
         }
         return upcoming || [];
@@ -532,11 +652,27 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
   }, [isVersus, opponentGameOver]);
 
   // ── Labels ───────────────────────────────────────────────
-  const myLabel      = isCoop ? '🤝 Bảng Chung (Co-op)' : isTraining ? '🎓 Bảng Khởi Động' : '👤 Bạn';
+  const myLabel      = isCoop ? '🤝 Bảng Chung (Co-op)' : isTraining ? '🎓 Bảng Khởi Động' : 'Mục Tiêu';
   const opLabel      = isPvE  ? '🤖 BOT AI'              : '⚔️ Đối Thủ';
   const showOpponent = isVersus || isPvE;
 
+  // Track max high score locally for display
+  const [maxScore, setMaxScore] = useState(202805);
+  useEffect(() => { if (score > maxScore) setMaxScore(score); }, [score, maxScore]);
+
   return (
+    <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+      {/* ── CLASSIC BLOCK BLAST HEADER ── */}
+      <div className="game-dynamic-header">
+         <div className="game-top-row">
+           <div className="crown-score">
+             <span role="img" aria-label="crown">👑</span> 
+             {maxScore}
+           </div>
+         </div>
+         <div className="center-huge-score">{score}</div>
+      </div>
+
     <div className={`game-area ${isMobile ? 'game-area--mobile' : ''}`}>
 
       {/* ─── OPPONENT ─── */}
@@ -564,40 +700,96 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
             <span className="training-text">{trainingScript.message}</span>
           </div>
         )}
-        <div className="player-header">
-          <span className="player-name">{myLabel}</span>
-          <div className="score-board">
-            ⭐ <span className={`score-value ${scorePopping ? 'pop' : ''}`}>{score}</span>
-          </div>
-        </div>
+        {showOpponent && <div style={{color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '-0.5rem', alignSelf: 'flex-start'}}>{myLabel}</div>}
+        {isCoopRef.current && <div style={{color: 'var(--c-mint)', fontSize: '0.9rem', marginBottom: '-0.5rem', fontWeight: 'bold'}}>🤝 {roomCreator ? `Phòng của ${roomCreator}` : 'Bảng Chiến Dịch Chung'}</div>}
+        {isVersus && <div style={{color: 'var(--danger-color)', fontSize: '0.9rem', marginBottom: '-0.5rem', fontWeight: 'bold'}}>⚔️ {roomCreator ? `Phòng của ${roomCreator}` : 'Bảng Thách Đấu'}</div>}
 
         {gameOver && (
-          <div className="game-status-banner game-status-banner--lose">
-            💥 HẾT CHỖ! {isCoop ? 'ĐỘI BẠN ĐÃ THUA' : 'BẠN ĐÃ THUA'}
+          <div className="game-status-banner game-status-banner--lose" style={{ flexDirection: 'column', gap: '0.5rem', padding: '1rem' }}>
+            <div>💥 HẾT CHỖ! {isCoop ? 'ĐỘI BẠN ĐÃ THUA' : 'BẠN ĐÃ THUA'}</div>
+            {isCoop && !coopRestarting && (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', marginTop: '0.5rem' }}
+                onClick={() => socket.emit('coop_request_restart', roomId)}
+              >
+                🔄 Chơi Lại Trận Mới
+              </button>
+            )}
+            {isCoop && coopRestarting && (
+                <div style={{fontSize: '0.85rem', color: 'var(--c-yellow)', marginTop: '0.2rem'}}>
+                  Đồng đội muốn chơi lại, tự động vào trận sau 3s...
+                </div>
+            )}
+            {(!isMultiplayer || isPvE) && (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', marginTop: '0.5rem' }}
+                onClick={handleSoloRestart}
+              >
+                🔄 Chơi Lại Trận Mới
+              </button>
+            )}
+            {isVersus && !versusRestarting && (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', marginTop: '0.5rem' }}
+                onClick={() => socket.emit('versus_request_restart', roomId)}
+              >
+                🔄 Tái Đấu (Chơi Lại)
+              </button>
+            )}
+            {isVersus && versusRestarting && (
+                <div style={{fontSize: '0.85rem', color: 'var(--c-yellow)', marginTop: '0.2rem'}}>
+                  Đối thủ muốn tái đấu, tự động vào trận sau 3s...
+                </div>
+            )}
           </div>
         )}
 
         {isVersus && opponentGameOver && (
-          <div className="game-status-banner game-status-banner--win">🎉 BẠN ĐÃ THẮNG!</div>
+          <div className="game-status-banner game-status-banner--win" style={{ flexDirection: 'column', gap: '0.5rem', padding: '1rem' }}>
+            <div>🎉 BẠN ĐÃ THẮNG!</div>
+            {!versusRestarting && (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', marginTop: '0.5rem' }}
+                onClick={() => socket.emit('versus_request_restart', roomId)}
+              >
+                🔄 Tái Đấu (Chơi Lại)
+              </button>
+            )}
+            {versusRestarting && (
+                <div style={{fontSize: '0.85rem', color: 'var(--c-yellow)', marginTop: '0.2rem'}}>
+                  Đối thủ muốn tái đấu, tự động vào trận sau 3s...
+                </div>
+            )}
+          </div>
         )}
 
-        <Board
-          board={board}
-          isOpponent={false}
-          previewState={
-            dragState.active ? previewState : (remoteDrag?.previewRow != null ? { matrix: remoteDrag.matrix, row: remoteDrag.previewRow, col: remoteDrag.previewCol } : null)
-          }
-          clearingCells={clearingCells}
-        />
+        {opponentLeft && (
+          <div className="game-status-banner game-status-banner--opponent">Đồng đội / Đối thủ đã thoát!</div>
+        )}
 
-        {!gameOver && (
-          <Shapes
-            shapes={shapes}
-            onDragStart={handleDragStart}
-            draggedIndex={dragState.index}
-            isMobile={isMobile}
+        <div className="board-and-shapes">
+          <Board
+            board={board}
+            isOpponent={false}
+            previewState={
+              dragState.active ? previewState : (remoteDrag?.previewRow != null ? { matrix: remoteDrag.matrix, row: remoteDrag.previewRow, col: remoteDrag.previewCol, colorId: remoteDrag.colorId } : null)
+            }
+            clearingCells={clearingCells}
           />
-        )}
+
+          {!gameOver && (
+            <Shapes
+              shapes={shapes}
+              onDragStart={handleDragStart}
+              draggedIndex={dragState.index}
+              isMobile={isMobile}
+            />
+          )}
+        </div>
       </div>
 
       {/* ─── FLOATING DRAG CLONE ─── */}
@@ -611,7 +803,7 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
           {dragState.matrix.map((row, rIdx) => (
             <div key={rIdx} className="shape-row">
               {row.map((cell, cIdx) => (
-                <div key={cIdx} className={`floating-cell ${cell === 0 ? 'empty' : ''}`} />
+                <div key={cIdx} className={`floating-cell ${cell === 0 ? 'empty' : `color-${dragState.colorId}`}`} />
               ))}
             </div>
           ))}
@@ -624,18 +816,19 @@ export default function Game({ roomId, mode, isMobile = false, uid }) {
           className={`floating-block ${isMobile ? 'floating-block--mobile' : ''}`}
           style={{ 
             transform: `translate(calc(${remoteDrag.x}px - 50%), calc(${remoteDrag.y}px - 110%))`,
-            opacity: 0.85, filter: 'drop-shadow(0 0 10px var(--block-color-start))'
+            opacity: 0.85
           }}
         >
           {remoteDrag.matrix.map((row, rIdx) => (
             <div key={rIdx} className="shape-row">
               {row.map((cell, cIdx) => (
-                <div key={cIdx} className={`floating-cell ${cell === 0 ? 'empty' : ''}`} />
+                <div key={cIdx} className={`floating-cell ${cell === 0 ? 'empty' : `color-${remoteDrag.colorId || 1}`}`} />
               ))}
             </div>
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }

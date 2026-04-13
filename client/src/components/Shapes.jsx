@@ -26,7 +26,7 @@ export default function Shapes({ shapes, onDragStart, draggedIndex, isMobile = f
             {row.map((cell, cIdx) => (
               <div
                 key={cIdx}
-                className={`shape-cell ${cell === 0 ? 'empty' : ''}`}
+                className={`shape-cell ${cell === 0 ? 'empty' : `color-${shape.colorId || 1}`}`}
               />
             ))}
           </div>

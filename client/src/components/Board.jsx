@@ -13,7 +13,7 @@ export default function Board({ board, isOpponent, previewState, clearingCells =
               key={`${rowIndex}-${colIndex}`}
               className={[
                 'grid-cell',
-                cellValue === 1 ? 'filled'        : '',
+                cellValue > 0 ? `filled color-${cellValue}` : '',
                 clearing        ? 'clearing'      : '',
               ].filter(Boolean).join(' ')}
               data-row={rowIndex}
@@ -34,7 +34,7 @@ export default function Board({ board, isOpponent, previewState, clearingCells =
              return (
                <div
                  key={`preview-${rIdx}-${cIdx}`}
-                 className="preview-shape-cell"
+                 className={`preview-shape-cell color-${previewState.colorId || 1}`}
                  style={{
                     gridRowStart: previewState.row + rIdx + 1,
                     gridColumnStart: previewState.col + cIdx + 1,

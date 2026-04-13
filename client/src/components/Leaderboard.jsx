@@ -20,7 +20,7 @@ export default function Leaderboard({ onClose, isMobile }) {
       });
   }, []);
 
-  const renderTable = (list, scoreKey, scoreLabel) => {
+  const renderTable = (list, scoreKey, scoreLabel, isRoomMode = false) => {
     if (list.length === 0) {
       return <div className="ldb-empty">Chưa có dữ liệu</div>;
     }
@@ -30,7 +30,7 @@ export default function Leaderboard({ onClose, isMobile }) {
           <thead>
             <tr>
               <th>Hạng</th>
-              <th>Người chơi</th>
+              <th>{isRoomMode ? 'Tên phòng / Người tạo' : 'Người chơi'}</th>
               <th>{scoreLabel}</th>
             </tr>
           </thead>
@@ -40,7 +40,9 @@ export default function Leaderboard({ onClose, isMobile }) {
                 <td className="ldb-rank">
                   {idx === 0 ? '🏆' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                 </td>
-                <td className="ldb-name">{item.nickname || 'Ẩn danh'}</td>
+                <td className="ldb-name">
+                  {isRoomMode ? `Phòng của ${item.nickname || 'Ẩn danh'}` : (item.nickname || 'Ẩn danh')}
+                </td>
                 <td className="ldb-score">{item[scoreKey]}</td>
               </tr>
             ))}
@@ -68,8 +70,8 @@ export default function Leaderboard({ onClose, isMobile }) {
           ) : (
             <>
               {activeTab === 'solo' && renderTable(data.solo, 'solo_high_score', 'Điểm Cao')}
-              {activeTab === 'coop' && renderTable(data.coop, 'coop_high_score', 'Điểm Cao')}
-              {activeTab === 'versus' && renderTable(data.versus, 'versus_wins', 'Số Trận Thắng')}
+              {activeTab === 'coop' && renderTable(data.coop, 'coop_high_score', 'Điểm Cao', true)}
+              {activeTab === 'versus' && renderTable(data.versus, 'versus_wins', 'Số Trận Thắng', true)}
             </>
           )}
         </div>
